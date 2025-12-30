@@ -33,6 +33,7 @@
   margin-bottom: 8px;
   padding-bottom: 4px;
   border-bottom: 1px solid #444;
+  position: relative;
 }
 
 .card-level {
@@ -50,6 +51,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.card-ability-icon {
+  position: absolute;
+  top: -12px;
+  right: -8px;
+  font-size: 16px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #ffaa00;
+  cursor: help;
 }
 
 .card-stats {

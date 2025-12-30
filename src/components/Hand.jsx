@@ -19,6 +19,7 @@ const Hand = ({ cards, owner, onCardClick, selectedCard, isCurrentPlayer }) => {
                 owner={owner}
                 onClick={() => isCurrentPlayer && onCardClick(index)}
                 isPlayable={isCurrentPlayer}
+                showAbility={true}
               />
             ) : (
               <div className="card-back">?</div>
