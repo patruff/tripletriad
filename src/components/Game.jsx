@@ -20,11 +20,6 @@ const Game = () => {
   const [activeRules, setActiveRules] = useState([]);
   const [showRules, setShowRules] = useState(false);
 
-  // Initialize game
-  useEffect(() => {
-    startNewGame();
-  }, []);
-
   const startNewGame = () => {
     // Get 5 random cards for each player
     const allCards = getRandomCards(10);
@@ -41,6 +36,11 @@ const Game = () => {
     setSelectedCard(null);
     setMessage('Select a card from your hand, then click on the board to place it.');
   };
+
+  // Initialize game
+  useEffect(() => {
+    startNewGame();
+  }, []);
 
   const toggleRule = (rule) => {
     setActiveRules(prev => {
