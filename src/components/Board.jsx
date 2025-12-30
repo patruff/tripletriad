@@ -55,7 +55,7 @@ const Board = ({ board, onCellClick, currentPlayer, elementalGrid = null }) => {
               </div>
             )}
             {cell ? (
-              <Card card={cell.card} owner={cell.owner} />
+              <Card card={cell.card} owner={cell.owner} showAbility={true} />
             ) : (
               <div className="empty-cell">
                 {currentPlayer === 'blue' && <span className="cell-hint">?</span>}

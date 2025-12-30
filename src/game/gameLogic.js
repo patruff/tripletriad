@@ -54,14 +54,54 @@ export const getNeighbors = (position) => {
   };
 };
 
-// Get effective card stats with elemental modifier
-const getEffectiveStats = (card, cellElement) => {
-  if (cellElement === 'none' || card.element === 'none') {
-    return card.stats;
+// Get effective card stats with elemental modifier and abilities
+const getEffectiveStats = (card, cellElement, position, board, owner) => {
+  let stats = [...card.stats];
+
+  // Apply elemental modifier
+  if (cellElement !== 'none' && card.element !== 'none') {
+    const elementModifier = card.element === cellElement ? 1 : -1;
+    // Check for Elemental Mastery ability - doubles element bonus
+    const hasElementalMastery = card.ability === 'elemental_mastery';
+    const modifier = hasElementalMastery ? elementModifier * 2 : elementModifier;
+    stats = stats.map(stat => Math.max(1, Math.min(10, stat + modifier)));
   }
 
-  const modifier = card.element === cellElement ? 1 : -1;
-  return card.stats.map(stat => Math.max(1, Math.min(10, stat + modifier)));
+  // Apply Bad Breath debuff from adjacent enemy cards
+  if (board && position !== undefined) {
+    const neighbors = getNeighbors(position);
+    Object.values(neighbors).forEach(neighborPos => {
+      if (neighborPos !== null && board[neighborPos] !== null) {
+        const neighborCard = board[neighborPos];
+        // Check if neighbor is enemy and has bad_breath
+        if (neighborCard.owner !== owner && neighborCard.card.ability === 'bad_breath') {
+          stats = stats.map(stat => Math.max(1, stat - 1));
+        }
+      }
+    });
+  }
+
+  // Apply Center Boost to adjacent friendly cards if this card is in center
+  // This is handled separately in the comparison logic
+
+  return stats;
+};
+
+// Helper function to apply Center Boost bonus
+const applyCenterBoost = (stats, board, position, owner) => {
+  // Check if there's a friendly card in center (position 4) with center_boost
+  if (board[4] && board[4].owner === owner && board[4].card.ability === 'center_boost') {
+    // Check if current position is adjacent to center
+    const neighbors = getNeighbors(4);
+    const adjacentToCenter = Object.values(neighbors).includes(position);
+
+    if (adjacentToCenter) {
+      // Add +1 to the lowest stat
+      const minStat = Math.min(...stats);
+      return stats.map(stat => stat === minStat ? Math.min(10, stat + 1) : stat);
+    }
+  }
+  return stats;
 };
 
 // Compare cards and flip if necessary (basic rule)
@@ -69,6 +109,7 @@ const getEffectiveStats = (card, cellElement) => {
 export const compareAndFlip = (board, position, card, owner, elementalGrid = null, activeRules = []) => {
   const neighbors = getNeighbors(position);
   const flippedPositions = [];
+  const reflectPositions = []; // Track cards with reflect ability that got flipped
 
   const directions = {
     top: { cardStat: 0, opponentStat: 2 },    // card's top vs opponent's bottom
@@ -77,9 +118,14 @@ export const compareAndFlip = (board, position, card, owner, elementalGrid = nul
     left: { cardStat: 3, opponentStat: 1 },   // card's left vs opponent's right
   };
 
-  // Get card stats with elemental modifier if applicable
+  // Get card stats with elemental modifier and abilities if applicable
   const useElemental = activeRules.includes(RULES.ELEMENTAL) && elementalGrid;
-  const cardStats = useElemental ? getEffectiveStats(card, elementalGrid[position]) : card.stats;
+  let cardStats = useElemental
+    ? getEffectiveStats(card, elementalGrid[position], position, board, owner)
+    : getEffectiveStats(card, 'none', position, board, owner);
+
+  // Apply Center Boost if this card is adjacent to a friendly center card with the ability
+  cardStats = applyCenterBoost(cardStats, board, position, owner);
 
   // Check for Same and Plus rule triggers
   const sameValues = [];
@@ -95,12 +141,26 @@ export const compareAndFlip = (board, position, card, owner, elementalGrid = nul
       // Only battle with opponent's cards
       if (neighborCard.owner !== owner) {
         const { cardStat, opponentStat } = directions[direction];
-        const neighborStats = useElemental
-          ? getEffectiveStats(neighborCard.card, elementalGrid[neighborPos])
-          : neighborCard.card.stats;
+        let neighborStats = useElemental
+          ? getEffectiveStats(neighborCard.card, elementalGrid[neighborPos], neighborPos, board, neighborCard.owner)
+          : getEffectiveStats(neighborCard.card, 'none', neighborPos, board, neighborCard.owner);
 
-        const cardValue = cardStats[cardStat];
-        const opponentValue = neighborStats[opponentStat];
+        // Apply Center Boost to neighbor if applicable
+        neighborStats = applyCenterBoost(neighborStats, board, neighborPos, neighborCard.owner);
+
+        let cardValue = cardStats[cardStat];
+        let opponentValue = neighborStats[opponentStat];
+
+        // Apply Slayer abilities
+        // Giant Slayer: Your 1-3 stats beat enemy A (10) stats
+        if (card.ability === 'giant_slayer' && cardValue >= 1 && cardValue <= 3 && opponentValue === 10) {
+          opponentValue = 0; // Make it always lose
+        }
+
+        // Ace Hunter: Treats all enemy A (10) values as 5
+        if (card.ability === 'ace_hunter' && opponentValue === 10) {
+          opponentValue = 5;
+        }
 
         adjacentCards.push({
           position: neighborPos,
@@ -109,12 +169,20 @@ export const compareAndFlip = (board, position, card, owner, elementalGrid = nul
           sum: cardValue + opponentValue,
         });
 
-        // Basic rule: higher stat wins
-        if (cardValue > opponentValue) {
+        // Check for Fortress ability - can't be flipped by basic comparison
+        const hasFortress = neighborCard.card.ability === 'fortress';
+
+        // Basic rule: higher stat wins (unless opponent has Fortress)
+        if (cardValue > opponentValue && !hasFortress) {
           flippedPositions.push(neighborPos);
+
+          // Check if flipped card has Reflect ability
+          if (neighborCard.card.ability === 'reflect') {
+            reflectPositions.push(position); // Reflect back to attacker
+          }
         }
 
-        // Track for Same rule
+        // Track for Same rule (ignores Fortress)
         if (cardValue === opponentValue) {
           sameValues.push(neighborPos);
         }
@@ -125,17 +193,23 @@ export const compareAndFlip = (board, position, card, owner, elementalGrid = nul
     }
   });
 
-  // Apply Same rule if active
+  // Apply Same rule if active (ignores Fortress)
   if (activeRules.includes(RULES.SAME) && sameValues.length >= 2) {
     // Same rule: if 2+ adjacent cards have equal values, flip all of them
     sameValues.forEach(pos => {
       if (!flippedPositions.includes(pos)) {
         flippedPositions.push(pos);
+
+        // Check if flipped card has Reflect ability
+        const card = board[pos];
+        if (card && card.card.ability === 'reflect' && !reflectPositions.includes(position)) {
+          reflectPositions.push(position);
+        }
       }
     });
   }
 
-  // Apply Plus rule if active
+  // Apply Plus rule if active (ignores Fortress)
   if (activeRules.includes(RULES.PLUS) && plusSums.length >= 2) {
     // Plus rule: if 2+ adjacent cards have equal sums, flip all of them
     const sumCounts = {};
@@ -145,14 +219,28 @@ export const compareAndFlip = (board, position, card, owner, elementalGrid = nul
 
     Object.keys(sumCounts).forEach(sum => {
       if (sumCounts[sum] >= 2) {
-        plusSums.forEach(({ position, sum: s }) => {
-          if (s === parseInt(sum) && !flippedPositions.includes(position)) {
-            flippedPositions.push(position);
+        plusSums.forEach(({ position: pos, sum: s }) => {
+          if (s === parseInt(sum) && !flippedPositions.includes(pos)) {
+            flippedPositions.push(pos);
+
+            // Check if flipped card has Reflect ability
+            const card = board[pos];
+            if (card && card.card.ability === 'reflect' && !reflectPositions.includes(position)) {
+              reflectPositions.push(position);
+            }
           }
         });
       }
     });
   }
+
+  // Apply Reflect ability - flip the attacker if they flipped a card with reflect
+  // Note: Reflect positions are added to the flipped list but shouldn't trigger combos
+  reflectPositions.forEach(pos => {
+    if (!flippedPositions.includes(pos)) {
+      flippedPositions.push(pos);
+    }
+  });
 
   return flippedPositions;
 };

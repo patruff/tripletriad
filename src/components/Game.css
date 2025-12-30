@@ -103,7 +103,8 @@
 }
 
 .new-game-btn,
-.rules-btn {
+.rules-btn,
+.deck-btn {
   background: linear-gradient(145deg, #4a7aff, #3a5adf);
   color: white;
   border: none;
@@ -121,8 +122,13 @@
   background: linear-gradient(145deg, #7a4aff, #5a3adf);
 }
 
+.deck-btn {
+  background: linear-gradient(145deg, #ff7a4a, #df5a3a);
+}
+
 .new-game-btn:hover,
-.rules-btn:hover {
+.rules-btn:hover,
+.deck-btn:hover {
   background: linear-gradient(145deg, #5a8aff, #4a6aef);
   transform: translateY(-2px);
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
@@ -130,6 +136,10 @@
 
 .rules-btn:hover {
   background: linear-gradient(145deg, #8a5aff, #6a4aef);
+}
+
+.deck-btn:hover {
+  background: linear-gradient(145deg, #ff8a5a, #ef6a4a);
 }
 
 .new-game-btn:active,

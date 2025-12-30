@@ -1,6 +1,6 @@
 import './Card.css';
 
-const Card = ({ card, owner, onClick, isPlayable }) => {
+const Card = ({ card, owner, onClick, isPlayable, showAbility = false }) => {
   if (!card) return null;
 
   const getStatDisplay = (stat) => {
@@ -22,6 +22,20 @@ const Card = ({ card, owner, onClick, isPlayable }) => {
     return colors[element] || 'transparent';
   };
 
+  const getAbilityIcon = (ability) => {
+    const icons = {
+      center_boost: '🎯',
+      elemental_mastery: '⚡',
+      bad_breath: '☠️',
+      poison_aura: '💀',
+      giant_slayer: '⚔️',
+      ace_hunter: '🎯',
+      fortress: '🛡️',
+      reflect: '🔄',
+    };
+    return icons[ability] || '';
+  };
+
   return (
     <div
       className={`card ${owner} ${isPlayable ? 'playable' : ''}`}
@@ -33,6 +47,11 @@ const Card = ({ card, owner, onClick, isPlayable }) => {
       <div className="card-header">
         <div className="card-level">Lv.{card.level}</div>
         <div className="card-name">{card.name}</div>
+        {showAbility && card.ability && (
+          <div className="card-ability-icon" title={card.ability.replace('_', ' ')}>
+            {getAbilityIcon(card.ability)}
+          </div>
+        )}
       </div>
       <div className="card-stats">
         <div className="stat stat-top">{getStatDisplay(card.stats[0])}</div>

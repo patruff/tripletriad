@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import Board from './Board';
 import Hand from './Hand';
-import { getRandomCards } from '../data/cards';
+import DeckBuilder from './DeckBuilder';
+import { getRandomDeck } from '../data/cards';
 import {
   createInitialState,
   placeCard,
@@ -19,27 +20,34 @@ const Game = () => {
   const [message, setMessage] = useState('');
   const [activeRules, setActiveRules] = useState([]);
   const [showRules, setShowRules] = useState(false);
+  const [playerDeck, setPlayerDeck] = useState(null);
+  const [showDeckBuilder, setShowDeckBuilder] = useState(true);
 
-  const startNewGame = () => {
-    // Get 5 random cards for each player
-    const allCards = getRandomCards(10);
-    const playerDeck = allCards.slice(0, 5);
-    const opponentDeck = allCards.slice(5, 10);
+  const startNewGame = (customDeck = null) => {
+    // Use custom deck or the saved player deck
+    const deck = customDeck || playerDeck || getRandomDeck(5, 30);
+    const opponentDeck = getRandomDeck(5, 30);
 
     // Generate elemental grid if Elemental rule is active
     const elementalGrid = activeRules.includes(RULES.ELEMENTAL)
       ? generateElementalGrid()
       : null;
 
-    const initialState = createInitialState(playerDeck, opponentDeck, activeRules, elementalGrid);
+    const initialState = createInitialState(deck, opponentDeck, activeRules, elementalGrid);
     setGameState(initialState);
     setSelectedCard(null);
     setMessage('Select a card from your hand, then click on the board to place it.');
   };
 
-  // Initialize game
+  const handleDeckComplete = (deck) => {
+    setPlayerDeck(deck);
+    setShowDeckBuilder(false);
+    startNewGame(deck);
+  };
+
+  // Initialize with deck builder
   useEffect(() => {
-    startNewGame();
+    // Don't auto-start, let user build deck first
   }, []);
 
   const toggleRule = (rule) => {
@@ -123,6 +131,11 @@ const Game = () => {
     }
   };
 
+  // Show deck builder if user hasn't built a deck yet
+  if (showDeckBuilder) {
+    return <DeckBuilder onDeckComplete={handleDeckComplete} initialDeck={playerDeck || []} />;
+  }
+
   if (!gameState) {
     return <div className="game">Loading...</div>;
   }
@@ -175,12 +188,18 @@ const Game = () => {
 
       <div className="game-controls">
         <button
+          className="deck-btn"
+          onClick={() => setShowDeckBuilder(true)}
+        >
+          Build Deck
+        </button>
+        <button
           className="rules-btn"
           onClick={() => setShowRules(!showRules)}
         >
           {showRules ? 'Hide Rules' : 'Game Rules'}
         </button>
-        <button className="new-game-btn" onClick={startNewGame}>
+        <button className="new-game-btn" onClick={() => startNewGame()}>
           New Game
         </button>
       </div>
