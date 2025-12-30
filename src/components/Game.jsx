@@ -1,0 +1,177 @@
+import { useState, useEffect } from 'react';
+import Board from './Board';
+import Hand from './Hand';
+import { getRandomCards } from '../data/cards';
+import {
+  createInitialState,
+  placeCard,
+  getScore,
+  getAIMove,
+  PLAYER,
+} from '../game/gameLogic';
+import './Game.css';
+
+const Game = () => {
+  const [gameState, setGameState] = useState(null);
+  const [selectedCard, setSelectedCard] = useState(null);
+  const [message, setMessage] = useState('');
+
+  // Initialize game
+  useEffect(() => {
+    startNewGame();
+  }, []);
+
+  const startNewGame = () => {
+    // Get 5 random cards for each player
+    const allCards = getRandomCards(10);
+    const playerDeck = allCards.slice(0, 5);
+    const opponentDeck = allCards.slice(5, 10);
+
+    const initialState = createInitialState(playerDeck, opponentDeck);
+    setGameState(initialState);
+    setSelectedCard(null);
+    setMessage('Select a card from your hand, then click on the board to place it.');
+  };
+
+  // Handle card selection from hand
+  const handleCardSelect = (cardIndex) => {
+    if (gameState.currentPlayer === PLAYER.BLUE && !gameState.gameOver) {
+      setSelectedCard(cardIndex);
+      setMessage('Now click on an empty cell on the board to place your card.');
+    }
+  };
+
+  // Handle placing card on board
+  const handleCellClick = (position) => {
+    if (gameState.gameOver) return;
+
+    if (gameState.currentPlayer === PLAYER.BLUE) {
+      if (selectedCard === null) {
+        setMessage('Please select a card from your hand first.');
+        return;
+      }
+
+      const newState = placeCard(gameState, position, selectedCard);
+      if (newState) {
+        setGameState(newState);
+        setSelectedCard(null);
+
+        if (newState.gameOver) {
+          announceWinner(newState.winner);
+        } else {
+          setMessage("Opponent's turn...");
+          // AI turn will be triggered by useEffect
+        }
+      } else {
+        setMessage('Invalid move. Try again.');
+      }
+    }
+  };
+
+  // AI turn
+  useEffect(() => {
+    if (
+      gameState &&
+      gameState.currentPlayer === PLAYER.RED &&
+      !gameState.gameOver
+    ) {
+      const timer = setTimeout(() => {
+        const aiMove = getAIMove(gameState);
+        const newState = placeCard(gameState, aiMove.position, aiMove.cardIndex);
+
+        if (newState) {
+          setGameState(newState);
+
+          if (newState.gameOver) {
+            announceWinner(newState.winner);
+          } else {
+            setMessage('Your turn! Select a card from your hand.');
+          }
+        }
+      }, 1000); // 1 second delay for AI move
+
+      return () => clearTimeout(timer);
+    }
+  }, [gameState]);
+
+  const announceWinner = (winner) => {
+    if (winner === PLAYER.BLUE) {
+      setMessage('🎉 You win! Congratulations!');
+    } else if (winner === PLAYER.RED) {
+      setMessage('😔 You lose. Better luck next time!');
+    } else {
+      setMessage("🤝 It's a draw!");
+    }
+  };
+
+  if (!gameState) {
+    return <div className="game">Loading...</div>;
+  }
+
+  const score = getScore(gameState.board);
+
+  return (
+    <div className="game">
+      <header className="game-header">
+        <h1>Triple Triad</h1>
+        <p className="game-subtitle">Final Fantasy VIII Card Game</p>
+      </header>
+
+      <div className="game-info">
+        <div className="score-board">
+          <div className="score blue">
+            <span className="score-label">You</span>
+            <span className="score-value">{score.blue}</span>
+          </div>
+          <div className="score red">
+            <span className="score-label">Opponent</span>
+            <span className="score-value">{score.red}</span>
+          </div>
+        </div>
+        <div className="game-message">{message}</div>
+      </div>
+
+      <Hand
+        cards={gameState.opponentHand}
+        owner="red"
+        onCardClick={() => {}}
+        selectedCard={null}
+        isCurrentPlayer={false}
+      />
+
+      <Board
+        board={gameState.board}
+        onCellClick={handleCellClick}
+        currentPlayer={gameState.currentPlayer}
+      />
+
+      <Hand
+        cards={gameState.playerHand}
+        owner="blue"
+        onCardClick={handleCardSelect}
+        selectedCard={selectedCard}
+        isCurrentPlayer={gameState.currentPlayer === PLAYER.BLUE}
+      />
+
+      <div className="game-controls">
+        <button className="new-game-btn" onClick={startNewGame}>
+          New Game
+        </button>
+      </div>
+
+      {gameState.gameOver && (
+        <div className="game-over-overlay">
+          <div className="game-over-message">
+            <h2>{message}</h2>
+            <p>Final Score: You {score.blue} - {score.red} Opponent</p>
+            <button className="play-again-btn" onClick={startNewGame}>
+              Play Again
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Game;

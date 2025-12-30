@@ -1,0 +1,51 @@
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, 140px);
+  grid-template-rows: repeat(3, 180px);
+  gap: 10px;
+  background: linear-gradient(135deg, #1a1a2e, #16213e);
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.board-cell {
+  background: linear-gradient(145deg, #0f3460, #0a2540);
+  border: 2px solid #1a4d7a;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.board-cell.empty {
+  cursor: pointer;
+}
+
+.board-cell.empty:hover {
+  background: linear-gradient(145deg, #1a5490, #0f3d70);
+  border-color: #2a6daa;
+  box-shadow: inset 0 0 20px rgba(74, 122, 255, 0.3);
+}
+
+.empty-cell {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cell-hint {
+  font-size: 48px;
+  color: rgba(74, 122, 255, 0.3);
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+.board-cell.empty:hover .cell-hint {
+  color: rgba(74, 122, 255, 0.6);
+  transform: scale(1.2);
+}
