@@ -8,6 +8,8 @@ import {
   getScore,
   getAIMove,
   PLAYER,
+  RULES,
+  generateElementalGrid,
 } from '../game/gameLogic';
 import './Game.css';
 
@@ -15,6 +17,8 @@ const Game = () => {
   const [gameState, setGameState] = useState(null);
   const [selectedCard, setSelectedCard] = useState(null);
   const [message, setMessage] = useState('');
+  const [activeRules, setActiveRules] = useState([]);
+  const [showRules, setShowRules] = useState(false);
 
   // Initialize game
   useEffect(() => {
@@ -27,10 +31,25 @@ const Game = () => {
     const playerDeck = allCards.slice(0, 5);
     const opponentDeck = allCards.slice(5, 10);
 
-    const initialState = createInitialState(playerDeck, opponentDeck);
+    // Generate elemental grid if Elemental rule is active
+    const elementalGrid = activeRules.includes(RULES.ELEMENTAL)
+      ? generateElementalGrid()
+      : null;
+
+    const initialState = createInitialState(playerDeck, opponentDeck, activeRules, elementalGrid);
     setGameState(initialState);
     setSelectedCard(null);
     setMessage('Select a card from your hand, then click on the board to place it.');
+  };
+
+  const toggleRule = (rule) => {
+    setActiveRules(prev => {
+      if (prev.includes(rule)) {
+        return prev.filter(r => r !== rule);
+      } else {
+        return [...prev, rule];
+      }
+    });
   };
 
   // Handle card selection from hand
@@ -143,6 +162,7 @@ const Game = () => {
         board={gameState.board}
         onCellClick={handleCellClick}
         currentPlayer={gameState.currentPlayer}
+        elementalGrid={gameState.elementalGrid}
       />
 
       <Hand
@@ -154,10 +174,76 @@ const Game = () => {
       />
 
       <div className="game-controls">
+        <button
+          className="rules-btn"
+          onClick={() => setShowRules(!showRules)}
+        >
+          {showRules ? 'Hide Rules' : 'Game Rules'}
+        </button>
         <button className="new-game-btn" onClick={startNewGame}>
           New Game
         </button>
       </div>
+
+      {showRules && (
+        <div className="rules-panel">
+          <h3>Special Rules</h3>
+          <div className="rules-list">
+            <label className="rule-option">
+              <input
+                type="checkbox"
+                checked={activeRules.includes(RULES.SAME)}
+                onChange={() => toggleRule(RULES.SAME)}
+                disabled={gameState.board.some(cell => cell !== null)}
+              />
+              <span>
+                <strong>Same:</strong> If 2+ adjacent cards have matching values, capture all
+              </span>
+            </label>
+            <label className="rule-option">
+              <input
+                type="checkbox"
+                checked={activeRules.includes(RULES.PLUS)}
+                onChange={() => toggleRule(RULES.PLUS)}
+                disabled={gameState.board.some(cell => cell !== null)}
+              />
+              <span>
+                <strong>Plus:</strong> If 2+ adjacent cards have matching sums, capture all
+              </span>
+            </label>
+            <label className="rule-option">
+              <input
+                type="checkbox"
+                checked={activeRules.includes(RULES.COMBO)}
+                onChange={() => toggleRule(RULES.COMBO)}
+                disabled={gameState.board.some(cell => cell !== null)}
+              />
+              <span>
+                <strong>Combo:</strong> Captured cards can capture other cards in a chain
+              </span>
+            </label>
+            <label className="rule-option">
+              <input
+                type="checkbox"
+                checked={activeRules.includes(RULES.ELEMENTAL)}
+                onChange={() => toggleRule(RULES.ELEMENTAL)}
+                disabled={gameState.board.some(cell => cell !== null)}
+              />
+              <span>
+                <strong>Elemental:</strong> Board cells have elements. Matching element +1, mismatched -1
+              </span>
+            </label>
+          </div>
+          {gameState.board.some(cell => cell !== null) && (
+            <p className="rule-warning">Rules can only be changed before the game starts</p>
+          )}
+          {activeRules.length > 0 && (
+            <div className="active-rules">
+              <strong>Active:</strong> {activeRules.join(', ').toUpperCase()}
+            </div>
+          )}
+        </div>
+      )}
 
       {gameState.gameOver && (
         <div className="game-over-overlay">

@@ -5,8 +5,25 @@ export const PLAYER = {
   RED: 'red',
 };
 
+export const RULES = {
+  SAME: 'same',
+  PLUS: 'plus',
+  COMBO: 'combo',
+  ELEMENTAL: 'elemental',
+};
+
+// Generate random elemental grid for Elemental rule
+export const generateElementalGrid = () => {
+  const elements = ['none', 'fire', 'ice', 'thunder', 'earth', 'poison', 'wind', 'water', 'holy'];
+  const grid = Array(9).fill(null).map(() => {
+    // 50% chance of no element, 50% chance of random element
+    return Math.random() < 0.5 ? 'none' : elements[Math.floor(Math.random() * elements.length)];
+  });
+  return grid;
+};
+
 // Create initial game state
-export const createInitialState = (playerDeck, opponentDeck) => {
+export const createInitialState = (playerDeck, opponentDeck, activeRules = [], elementalGrid = null) => {
   return {
     board: Array(9).fill(null), // 3x3 grid, null = empty
     playerHand: [...playerDeck],
@@ -14,6 +31,8 @@ export const createInitialState = (playerDeck, opponentDeck) => {
     currentPlayer: PLAYER.BLUE,
     gameOver: false,
     winner: null,
+    activeRules: activeRules,
+    elementalGrid: elementalGrid || Array(9).fill('none'),
   };
 };
 
@@ -35,9 +54,19 @@ export const getNeighbors = (position) => {
   };
 };
 
-// Compare cards and flip if necessary
+// Get effective card stats with elemental modifier
+const getEffectiveStats = (card, cellElement) => {
+  if (cellElement === 'none' || card.element === 'none') {
+    return card.stats;
+  }
+
+  const modifier = card.element === cellElement ? 1 : -1;
+  return card.stats.map(stat => Math.max(1, Math.min(10, stat + modifier)));
+};
+
+// Compare cards and flip if necessary (basic rule)
 // Returns array of positions that were flipped
-export const compareAndFlip = (board, position, card, owner) => {
+export const compareAndFlip = (board, position, card, owner, elementalGrid = null, activeRules = []) => {
   const neighbors = getNeighbors(position);
   const flippedPositions = [];
 
@@ -48,6 +77,15 @@ export const compareAndFlip = (board, position, card, owner) => {
     left: { cardStat: 3, opponentStat: 1 },   // card's left vs opponent's right
   };
 
+  // Get card stats with elemental modifier if applicable
+  const useElemental = activeRules.includes(RULES.ELEMENTAL) && elementalGrid;
+  const cardStats = useElemental ? getEffectiveStats(card, elementalGrid[position]) : card.stats;
+
+  // Check for Same and Plus rule triggers
+  const sameValues = [];
+  const plusSums = [];
+  const adjacentCards = [];
+
   Object.keys(neighbors).forEach(direction => {
     const neighborPos = neighbors[direction];
 
@@ -57,23 +95,100 @@ export const compareAndFlip = (board, position, card, owner) => {
       // Only battle with opponent's cards
       if (neighborCard.owner !== owner) {
         const { cardStat, opponentStat } = directions[direction];
-        const cardValue = card.stats[cardStat];
-        const opponentValue = neighborCard.card.stats[opponentStat];
+        const neighborStats = useElemental
+          ? getEffectiveStats(neighborCard.card, elementalGrid[neighborPos])
+          : neighborCard.card.stats;
 
-        // If our card's stat is higher, flip the opponent's card
+        const cardValue = cardStats[cardStat];
+        const opponentValue = neighborStats[opponentStat];
+
+        adjacentCards.push({
+          position: neighborPos,
+          cardValue,
+          opponentValue,
+          sum: cardValue + opponentValue,
+        });
+
+        // Basic rule: higher stat wins
         if (cardValue > opponentValue) {
           flippedPositions.push(neighborPos);
         }
+
+        // Track for Same rule
+        if (cardValue === opponentValue) {
+          sameValues.push(neighborPos);
+        }
+
+        // Track for Plus rule
+        plusSums.push({ position: neighborPos, sum: cardValue + opponentValue });
       }
     }
   });
 
+  // Apply Same rule if active
+  if (activeRules.includes(RULES.SAME) && sameValues.length >= 2) {
+    // Same rule: if 2+ adjacent cards have equal values, flip all of them
+    sameValues.forEach(pos => {
+      if (!flippedPositions.includes(pos)) {
+        flippedPositions.push(pos);
+      }
+    });
+  }
+
+  // Apply Plus rule if active
+  if (activeRules.includes(RULES.PLUS) && plusSums.length >= 2) {
+    // Plus rule: if 2+ adjacent cards have equal sums, flip all of them
+    const sumCounts = {};
+    plusSums.forEach(({ sum }) => {
+      sumCounts[sum] = (sumCounts[sum] || 0) + 1;
+    });
+
+    Object.keys(sumCounts).forEach(sum => {
+      if (sumCounts[sum] >= 2) {
+        plusSums.forEach(({ position, sum: s }) => {
+          if (s === parseInt(sum) && !flippedPositions.includes(position)) {
+            flippedPositions.push(position);
+          }
+        });
+      }
+    });
+  }
+
   return flippedPositions;
+};
+
+// Apply Combo rule: flipped cards can flip other cards
+const applyCombo = (board, initialFlips, owner, elementalGrid, activeRules) => {
+  if (!activeRules.includes(RULES.COMBO)) {
+    return initialFlips;
+  }
+
+  const allFlipped = new Set(initialFlips);
+  const toProcess = [...initialFlips];
+
+  while (toProcess.length > 0) {
+    const pos = toProcess.shift();
+    const cell = board[pos];
+
+    if (!cell) continue;
+
+    // Check if this flipped card can flip others
+    const comboFlips = compareAndFlip(board, pos, cell.card, owner, elementalGrid, activeRules);
+
+    comboFlips.forEach(flipPos => {
+      if (!allFlipped.has(flipPos)) {
+        allFlipped.add(flipPos);
+        toProcess.push(flipPos);
+      }
+    });
+  }
+
+  return Array.from(allFlipped);
 };
 
 // Place a card on the board
 export const placeCard = (state, position, cardIndex) => {
-  const { board, currentPlayer, playerHand, opponentHand } = state;
+  const { board, currentPlayer, playerHand, opponentHand, activeRules, elementalGrid } = state;
 
   // Validate move
   if (!isValidPosition(position) || board[position] !== null) {
@@ -95,10 +210,31 @@ export const placeCard = (state, position, cardIndex) => {
     owner: currentPlayer,
   };
 
-  // Check for flips
-  const flippedPositions = compareAndFlip(newBoard, position, card, currentPlayer);
+  // Check for initial flips
+  let flippedPositions = compareAndFlip(
+    newBoard,
+    position,
+    card,
+    currentPlayer,
+    elementalGrid,
+    activeRules
+  );
 
-  // Flip the cards
+  // Apply Combo rule if active
+  if (activeRules.includes(RULES.COMBO) && flippedPositions.length > 0) {
+    // First flip the initial cards
+    flippedPositions.forEach(pos => {
+      newBoard[pos] = {
+        ...newBoard[pos],
+        owner: currentPlayer,
+      };
+    });
+
+    // Then check for combo flips
+    flippedPositions = applyCombo(newBoard, flippedPositions, currentPlayer, elementalGrid, activeRules);
+  }
+
+  // Flip all cards (including combo flips)
   flippedPositions.forEach(pos => {
     newBoard[pos] = {
       ...newBoard[pos],
@@ -132,6 +268,8 @@ export const placeCard = (state, position, cardIndex) => {
       position,
       flippedPositions,
     },
+    activeRules,
+    elementalGrid,
   };
 };
 
@@ -168,7 +306,7 @@ export const getWinner = (board) => {
 
 // AI: Simple strategy - place card in position that flips most cards
 export const getAIMove = (state) => {
-  const { board, opponentHand } = state;
+  const { board, opponentHand, activeRules, elementalGrid } = state;
   let bestMove = null;
   let maxFlips = -1;
 
@@ -181,7 +319,9 @@ export const getAIMove = (state) => {
           board.map(c => c), // shallow copy for simulation
           position,
           card,
-          PLAYER.RED
+          PLAYER.RED,
+          elementalGrid,
+          activeRules || []
         );
 
         if (flippedPositions.length > maxFlips) {
