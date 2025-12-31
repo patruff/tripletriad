@@ -24,16 +24,43 @@ const Card = ({ card, owner, onClick, isPlayable, showAbility = false }) => {
 
   const getAbilityIcon = (ability) => {
     const icons = {
+      // Original abilities
       center_boost: '🎯',
       elemental_mastery: '⚡',
       bad_breath: '☠️',
       poison_aura: '💀',
       giant_slayer: '⚔️',
-      ace_hunter: '🎯',
+      ace_hunter: '🏹',
       fortress: '🛡️',
       reflect: '🔄',
+      // Swarm abilities
+      hive_mind: '🐝',
+      infestation: '🦗',
+      symbiosis: '🤝',
+      // Undead abilities
+      haunt: '👻',
+      reanimate: '🧟',
+      curse: '😈',
+      // Flying abilities
+      hover: '🪶',
+      ambush: '🦅',
+      scout: '👁️',
+      // Heavy abilities
+      lockdown: '⚓',
+      self_destruct: '💣',
+      armor_plating: '🛡️',
+      // Tactical abilities
+      amplifier: '📢',
+      mirror: '🪞',
+      nullifier: '🚫',
+      // Signature abilities
+      scavenge: '🦴',
+      '10000_needles': '🌵',
+      grudge: '😠',
+      explode: '💥',
+      roar: '🦁',
     };
-    return icons[ability] || '';
+    return icons[ability] || '✨';
   };
 
   return (
