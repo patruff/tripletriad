@@ -33,6 +33,8 @@ export const createInitialState = (playerDeck, opponentDeck, activeRules = [], e
     winner: null,
     activeRules: activeRules,
     elementalGrid: elementalGrid || Array(9).fill('none'),
+    flippedCards: { blue: 0, red: 0 }, // Track flipped cards for Grudge ability
+    cardStates: {}, // Track card-specific state (e.g., armor hits taken)
   };
 };
 
@@ -55,16 +57,40 @@ export const getNeighbors = (position) => {
 };
 
 // Get effective card stats with elemental modifier and abilities
-const getEffectiveStats = (card, cellElement, position, board, owner) => {
+const getEffectiveStats = (card, cellElement, position, board, owner, gameState = null) => {
   let stats = [...card.stats];
+
+  // Apply Hive Mind - +1 for each other copy of this card on board
+  if (card.ability === 'hive_mind' && board) {
+    const copiesOnBoard = board.filter(
+      cell => cell && cell.owner === owner && cell.card.id === card.id
+    ).length;
+    if (copiesOnBoard > 0) {
+      // Don't count self if already placed
+      const boost = copiesOnBoard;
+      stats = stats.map(stat => Math.min(10, stat + boost));
+    }
+  }
+
+  // Apply Grudge - +1 for each card this player has lost
+  if (card.ability === 'grudge' && gameState && gameState.flippedCards) {
+    const lostCards = owner === PLAYER.BLUE ? gameState.flippedCards.blue : gameState.flippedCards.red;
+    stats = stats.map(stat => Math.min(10, stat + lostCards));
+  }
 
   // Apply elemental modifier
   if (cellElement !== 'none' && card.element !== 'none') {
     const elementModifier = card.element === cellElement ? 1 : -1;
-    // Check for Elemental Mastery ability - doubles element bonus
-    const hasElementalMastery = card.ability === 'elemental_mastery';
-    const modifier = hasElementalMastery ? elementModifier * 2 : elementModifier;
-    stats = stats.map(stat => Math.max(1, Math.min(10, stat + modifier)));
+
+    // Hover ability - ignores penalties but keeps bonuses
+    if (card.ability === 'hover' && elementModifier < 0) {
+      // Skip the penalty
+    } else {
+      // Check for Elemental Mastery ability - doubles element bonus
+      const hasElementalMastery = card.ability === 'elemental_mastery';
+      const modifier = hasElementalMastery ? elementModifier * 2 : elementModifier;
+      stats = stats.map(stat => Math.max(1, Math.min(10, stat + modifier)));
+    }
   }
 
   // Apply Bad Breath debuff from adjacent enemy cards
@@ -106,7 +132,7 @@ const applyCenterBoost = (stats, board, position, owner) => {
 
 // Compare cards and flip if necessary (basic rule)
 // Returns array of positions that were flipped
-export const compareAndFlip = (board, position, card, owner, elementalGrid = null, activeRules = []) => {
+export const compareAndFlip = (board, position, card, owner, elementalGrid = null, activeRules = [], gameState = null) => {
   const neighbors = getNeighbors(position);
   const flippedPositions = [];
   const reflectPositions = []; // Track cards with reflect ability that got flipped
@@ -121,8 +147,8 @@ export const compareAndFlip = (board, position, card, owner, elementalGrid = nul
   // Get card stats with elemental modifier and abilities if applicable
   const useElemental = activeRules.includes(RULES.ELEMENTAL) && elementalGrid;
   let cardStats = useElemental
-    ? getEffectiveStats(card, elementalGrid[position], position, board, owner)
-    : getEffectiveStats(card, 'none', position, board, owner);
+    ? getEffectiveStats(card, elementalGrid[position], position, board, owner, gameState)
+    : getEffectiveStats(card, 'none', position, board, owner, gameState);
 
   // Apply Center Boost if this card is adjacent to a friendly center card with the ability
   cardStats = applyCenterBoost(cardStats, board, position, owner);
@@ -142,8 +168,8 @@ export const compareAndFlip = (board, position, card, owner, elementalGrid = nul
       if (neighborCard.owner !== owner) {
         const { cardStat, opponentStat } = directions[direction];
         let neighborStats = useElemental
-          ? getEffectiveStats(neighborCard.card, elementalGrid[neighborPos], neighborPos, board, neighborCard.owner)
-          : getEffectiveStats(neighborCard.card, 'none', neighborPos, board, neighborCard.owner);
+          ? getEffectiveStats(neighborCard.card, elementalGrid[neighborPos], neighborPos, board, neighborCard.owner, gameState)
+          : getEffectiveStats(neighborCard.card, 'none', neighborPos, board, neighborCard.owner, gameState);
 
         // Apply Center Boost to neighbor if applicable
         neighborStats = applyCenterBoost(neighborStats, board, neighborPos, neighborCard.owner);
@@ -162,6 +188,11 @@ export const compareAndFlip = (board, position, card, owner, elementalGrid = nul
           opponentValue = 5;
         }
 
+        // 10,000 Needles: Auto-win vs A (10)
+        if (card.ability === '10000_needles' && opponentValue === 10) {
+          opponentValue = 0; // Make it always lose
+        }
+
         adjacentCards.push({
           position: neighborPos,
           cardValue,
@@ -169,11 +200,12 @@ export const compareAndFlip = (board, position, card, owner, elementalGrid = nul
           sum: cardValue + opponentValue,
         });
 
-        // Check for Fortress ability - can't be flipped by basic comparison
+        // Check for Fortress and Lockdown abilities - can't be flipped by basic comparison
         const hasFortress = neighborCard.card.ability === 'fortress';
+        const hasLockdown = neighborCard.card.ability === 'lockdown';
 
-        // Basic rule: higher stat wins (unless opponent has Fortress)
-        if (cardValue > opponentValue && !hasFortress) {
+        // Basic rule: higher stat wins (unless opponent has Fortress/Lockdown)
+        if (cardValue > opponentValue && !hasFortress && !hasLockdown) {
           flippedPositions.push(neighborPos);
 
           // Check if flipped card has Reflect ability
@@ -182,34 +214,39 @@ export const compareAndFlip = (board, position, card, owner, elementalGrid = nul
           }
         }
 
-        // Track for Same rule (ignores Fortress)
-        if (cardValue === opponentValue) {
+        // Track for Same rule (ignores Fortress but NOT Lockdown)
+        if (cardValue === opponentValue && !hasLockdown) {
           sameValues.push(neighborPos);
         }
 
-        // Track for Plus rule
-        plusSums.push({ position: neighborPos, sum: cardValue + opponentValue });
+        // Track for Plus rule (ignores Fortress but NOT Lockdown)
+        if (!hasLockdown) {
+          plusSums.push({ position: neighborPos, sum: cardValue + opponentValue });
+        }
       }
     }
   });
 
-  // Apply Same rule if active (ignores Fortress)
+  // Apply Same rule if active (ignores Fortress, but Lockdown is immune)
   if (activeRules.includes(RULES.SAME) && sameValues.length >= 2) {
     // Same rule: if 2+ adjacent cards have equal values, flip all of them
     sameValues.forEach(pos => {
       if (!flippedPositions.includes(pos)) {
-        flippedPositions.push(pos);
+        const targetCard = board[pos];
+        // Lockdown prevents Same/Plus flips
+        if (!targetCard || targetCard.card.ability !== 'lockdown') {
+          flippedPositions.push(pos);
 
-        // Check if flipped card has Reflect ability
-        const card = board[pos];
-        if (card && card.card.ability === 'reflect' && !reflectPositions.includes(position)) {
-          reflectPositions.push(position);
+          // Check if flipped card has Reflect ability
+          if (targetCard && targetCard.card.ability === 'reflect' && !reflectPositions.includes(position)) {
+            reflectPositions.push(position);
+          }
         }
       }
     });
   }
 
-  // Apply Plus rule if active (ignores Fortress)
+  // Apply Plus rule if active (ignores Fortress, but Lockdown is immune)
   if (activeRules.includes(RULES.PLUS) && plusSums.length >= 2) {
     // Plus rule: if 2+ adjacent cards have equal sums, flip all of them
     const sumCounts = {};
@@ -221,12 +258,15 @@ export const compareAndFlip = (board, position, card, owner, elementalGrid = nul
       if (sumCounts[sum] >= 2) {
         plusSums.forEach(({ position: pos, sum: s }) => {
           if (s === parseInt(sum) && !flippedPositions.includes(pos)) {
-            flippedPositions.push(pos);
+            const targetCard = board[pos];
+            // Lockdown prevents Same/Plus flips
+            if (!targetCard || targetCard.card.ability !== 'lockdown') {
+              flippedPositions.push(pos);
 
-            // Check if flipped card has Reflect ability
-            const card = board[pos];
-            if (card && card.card.ability === 'reflect' && !reflectPositions.includes(position)) {
-              reflectPositions.push(position);
+              // Check if flipped card has Reflect ability
+              if (targetCard && targetCard.card.ability === 'reflect' && !reflectPositions.includes(position)) {
+                reflectPositions.push(position);
+              }
             }
           }
         });
@@ -246,7 +286,7 @@ export const compareAndFlip = (board, position, card, owner, elementalGrid = nul
 };
 
 // Apply Combo rule: flipped cards can flip other cards
-const applyCombo = (board, initialFlips, owner, elementalGrid, activeRules) => {
+const applyCombo = (board, initialFlips, owner, elementalGrid, activeRules, gameState) => {
   if (!activeRules.includes(RULES.COMBO)) {
     return initialFlips;
   }
@@ -261,7 +301,7 @@ const applyCombo = (board, initialFlips, owner, elementalGrid, activeRules) => {
     if (!cell) continue;
 
     // Check if this flipped card can flip others
-    const comboFlips = compareAndFlip(board, pos, cell.card, owner, elementalGrid, activeRules);
+    const comboFlips = compareAndFlip(board, pos, cell.card, owner, elementalGrid, activeRules, gameState);
 
     comboFlips.forEach(flipPos => {
       if (!allFlipped.has(flipPos)) {
@@ -276,7 +316,7 @@ const applyCombo = (board, initialFlips, owner, elementalGrid, activeRules) => {
 
 // Place a card on the board
 export const placeCard = (state, position, cardIndex) => {
-  const { board, currentPlayer, playerHand, opponentHand, activeRules, elementalGrid } = state;
+  const { board, currentPlayer, playerHand, opponentHand, activeRules, elementalGrid, flippedCards } = state;
 
   // Validate move
   if (!isValidPosition(position) || board[position] !== null) {
@@ -291,6 +331,7 @@ export const placeCard = (state, position, cardIndex) => {
 
   const card = hand[cardIndex];
   const newBoard = [...board];
+  const newFlippedCards = { ...flippedCards };
 
   // Place the card
   newBoard[position] = {
@@ -305,7 +346,8 @@ export const placeCard = (state, position, cardIndex) => {
     card,
     currentPlayer,
     elementalGrid,
-    activeRules
+    activeRules,
+    { ...state, board: newBoard }
   );
 
   // Apply Combo rule if active
@@ -319,15 +361,63 @@ export const placeCard = (state, position, cardIndex) => {
     });
 
     // Then check for combo flips
-    flippedPositions = applyCombo(newBoard, flippedPositions, currentPlayer, elementalGrid, activeRules);
+    flippedPositions = applyCombo(newBoard, flippedPositions, currentPlayer, elementalGrid, activeRules, { ...state, board: newBoard });
   }
 
-  // Flip all cards (including combo flips)
+  // Track flipped cards for Grudge ability and apply ON_FLIP triggers
+  const onFlipTriggers = [];
   flippedPositions.forEach(pos => {
+    const flippedCard = newBoard[pos];
+    const previousOwner = flippedCard.owner;
+
+    // Track flipped cards for Grudge ability
+    if (previousOwner !== currentPlayer) {
+      if (previousOwner === PLAYER.BLUE) {
+        newFlippedCards.blue++;
+      } else {
+        newFlippedCards.red++;
+      }
+
+      // Check for ON_FLIP abilities (Haunt, Explode, etc.)
+      if (flippedCard.card.ability === 'haunt') {
+        onFlipTriggers.push({ type: 'haunt', position: pos });
+      } else if (flippedCard.card.ability === 'explode') {
+        onFlipTriggers.push({ type: 'explode', position: pos });
+      } else if (flippedCard.card.ability === 'self_destruct') {
+        onFlipTriggers.push({ type: 'self_destruct', position: pos });
+      }
+    }
+
     newBoard[pos] = {
       ...newBoard[pos],
       owner: currentPlayer,
     };
+  });
+
+  // Process ON_FLIP triggers
+  onFlipTriggers.forEach(trigger => {
+    if (trigger.type === 'haunt') {
+      // Haunt: Flip one random adjacent card
+      const neighbors = getNeighbors(trigger.position);
+      const adjacentEnemies = Object.values(neighbors).filter(
+        pos => pos !== null && newBoard[pos] && newBoard[pos].owner !== currentPlayer
+      );
+      if (adjacentEnemies.length > 0) {
+        const randomEnemy = adjacentEnemies[Math.floor(Math.random() * adjacentEnemies.length)];
+        newBoard[randomEnemy] = { ...newBoard[randomEnemy], owner: currentPlayer };
+      }
+    } else if (trigger.type === 'explode') {
+      // Explode: Clear all adjacent cards (set to null)
+      const neighbors = getNeighbors(trigger.position);
+      Object.values(neighbors).forEach(pos => {
+        if (pos !== null && newBoard[pos]) {
+          newBoard[pos] = null;
+        }
+      });
+    } else if (trigger.type === 'self_destruct') {
+      // Self-Destruct: Remove this card from board
+      newBoard[trigger.position] = null;
+    }
   });
 
   // Remove card from hand
@@ -358,6 +448,8 @@ export const placeCard = (state, position, cardIndex) => {
     },
     activeRules,
     elementalGrid,
+    flippedCards: newFlippedCards,
+    cardStates: state.cardStates || {},
   };
 };
 
@@ -409,7 +501,8 @@ export const getAIMove = (state) => {
           card,
           PLAYER.RED,
           elementalGrid,
-          activeRules || []
+          activeRules || [],
+          state
         );
 
         if (flippedPositions.length > maxFlips) {
