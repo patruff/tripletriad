@@ -269,7 +269,7 @@ const Game = () => {
           <div className="game-over-message">
             <h2>{message}</h2>
             <p>Final Score: You {score.blue} - {score.red} Opponent</p>
-            <button className="play-again-btn" onClick={startNewGame}>
+            <button className="play-again-btn" onClick={() => startNewGame()}>
               Play Again
             </button>
           </div>
