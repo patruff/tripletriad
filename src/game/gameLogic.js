@@ -98,12 +98,11 @@ const getEffectiveStats = (card, cellElement, position, board, owner, gameState 
   // Apply Hive Mind - +1 for each other copy of this card on board
   if (card.ability === 'hive_mind' && board) {
     const copiesOnBoard = board.filter(
-      cell => cell && cell.owner === owner && cell.card.id === card.id
+      (cell, idx) => cell && cell.owner === owner && cell.card.id === card.id && idx !== position
     ).length;
     if (copiesOnBoard > 0) {
-      // Don't count self if already placed
-      const boost = copiesOnBoard;
-      stats = stats.map(stat => Math.min(10, stat + boost));
+      // Boost based on OTHER copies (not counting self)
+      stats = stats.map(stat => Math.min(10, stat + copiesOnBoard));
     }
   }
 

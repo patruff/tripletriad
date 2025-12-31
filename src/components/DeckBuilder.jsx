@@ -89,7 +89,7 @@ const DeckBuilder = ({ onDeckComplete, initialDeck = [] }) => {
               <div key={index} className="deck-slot">
                 {card ? (
                   <div className="deck-card-wrapper" onClick={() => handleCardClick(card)}>
-                    <Card card={card} owner="blue" />
+                    <Card card={card} owner="blue" showAbility={true} />
                     <div className="card-cost">Cost: {card.cost}</div>
                     {card.ability && (
                       <div className="card-ability-badge">
@@ -164,7 +164,7 @@ const DeckBuilder = ({ onDeckComplete, initialDeck = [] }) => {
                 className={`collection-card ${isSelected ? 'selected' : ''} ${!canSelect && !isSelected ? 'disabled' : ''}`}
                 onClick={() => handleCardClick(card)}
               >
-                <Card card={card} owner="blue" isPlayable={canSelect || isSelected} />
+                <Card card={card} owner="blue" isPlayable={canSelect || isSelected} showAbility={true} />
                 <div className="card-info">
                   <div className="card-cost-badge">Cost: {card.cost}</div>
                   {card.ability && (
