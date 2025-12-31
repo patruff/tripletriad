@@ -1,4 +1,5 @@
 import './Card.css';
+import { getAbility } from '../data/abilities';
 
 const Card = ({ card, owner, onClick, isPlayable, showAbility = false }) => {
   if (!card) return null;
@@ -63,6 +64,8 @@ const Card = ({ card, owner, onClick, isPlayable, showAbility = false }) => {
     return icons[ability] || '✨';
   };
 
+  const abilityData = card.ability ? getAbility(card.ability) : null;
+
   return (
     <div
       className={`card ${owner} ${isPlayable ? 'playable' : ''}`}
@@ -74,8 +77,11 @@ const Card = ({ card, owner, onClick, isPlayable, showAbility = false }) => {
       <div className="card-header">
         <div className="card-level">Lv.{card.level}</div>
         <div className="card-name">{card.name}</div>
-        {showAbility && card.ability && (
-          <div className="card-ability-icon" title={card.ability.replace('_', ' ')}>
+        {showAbility && card.ability && abilityData && (
+          <div
+            className="card-ability-icon"
+            data-tooltip={`${abilityData.name}\n${abilityData.description}`}
+          >
             {getAbilityIcon(card.ability)}
           </div>
         )}

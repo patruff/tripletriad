@@ -67,6 +67,50 @@
   justify-content: center;
   border: 2px solid #ffaa00;
   cursor: help;
+  z-index: 10;
+}
+
+.card-ability-icon::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 50%;
+  transform: translateX(50%);
+  background: rgba(0, 0, 0, 0.95);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: pre-line;
+  min-width: 200px;
+  max-width: 250px;
+  text-align: left;
+  border: 2px solid #ffaa00;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  z-index: 1000;
+  line-height: 1.4;
+}
+
+.card-ability-icon::after {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 2px);
+  right: 50%;
+  transform: translateX(50%);
+  border: 6px solid transparent;
+  border-top-color: #ffaa00;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  z-index: 1000;
+}
+
+.card-ability-icon:hover::before,
+.card-ability-icon:hover::after {
+  opacity: 1;
 }
 
 .card-stats {
